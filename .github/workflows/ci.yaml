@@ -86,7 +86,7 @@ jobs:
       - name: pillar/skill parity (the served skill at the pinned agents rev)
         run: |
           set -euo pipefail
-          REV="$(git -C kernel rev-parse HEAD:kernel/.agents 2>/dev/null || git -C "$GITHUB_WORKSPACE/kernel" rev-parse HEAD:.agents)"
+          REV="$(git -C kernel rev-parse HEAD:.agents)"
           git clone -q --no-checkout https://github.com/tibrezus/agents "$GITHUB_WORKSPACE/agents"
           git -C "$GITHUB_WORKSPACE/agents" checkout -q "$REV"
           python3 - "$GITHUB_WORKSPACE" <<'PY'
