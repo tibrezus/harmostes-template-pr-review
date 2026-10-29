@@ -1,0 +1,8 @@
+# What THIS repo delivers to a cluster: the template CR, nothing else.
+# (The config tier patches the decision fields per environment; the tasks
+# text becomes a ConfigMap at flip time — delivered by THIS repo then, via
+# a configMapGenerator added in the same change as the flip.)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - template.yaml

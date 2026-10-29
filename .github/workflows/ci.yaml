@@ -1,0 +1,69 @@
+# The pr-review template repo's gates: CR conformance + drift guards against
+# the kernel at the pinned tag (the vendored plugins and the task text must
+# match the image the fleet actually runs — the #606 pattern, new address).
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  KERNEL_TAG: "v1.9.2"
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout the kernel at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: tibrezus/harmostes
+          ref: ${{ env.KERNEL_TAG }}
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: install the envtest control plane
+        run: |
+          sudo mkdir -p /usr/local/kubebuilder/bin && sudo chown -R "$USER" /usr/local/kubebuilder
+          curl -sL --retry 5 --retry-all-errors "https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.31.0/envtest-v1.31.0-linux-amd64.tar.gz" | tar -xz -C /tmp
+          mv /tmp/controller-tools/envtest/* /usr/local/kubebuilder/bin/
+      - name: CR conformance (the shared harness)
+        run: |
+          git clone --depth 1 https://github.com/tibrezus/harmostes-config /tmp/config
+          cd /tmp/config && go mod download 2>/dev/null || true
+          go run ./hack/conformance.go -crds "$GITHUB_WORKSPACE/kernel/chart/crds" -objects "$GITHUB_WORKSPACE"
+
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout the kernel at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: tibrezus/harmostes
+          ref: ${{ env.KERNEL_TAG }}
+          path: kernel
+      - name: vendored plugins match the kernel's image content
+        run: |
+          set -euo pipefail
+          fail=0
+          for pair in "plugins/pr-review.sh:plugins/pr-review/pr-review.sh" "plugins/workspace.sh:plugins/workspace/workspace.sh" "plugins/git-host.sh:plugins/lib/git-host.sh"; do
+            mine="${pair%%:*}"; theirs="kernel/${pair##*:}"
+            if ! diff -q "$mine" "$theirs" >/dev/null 2>&1; then
+              echo "::error::DRIFT: $mine differs from $theirs — sync the vendored copy (or bump KERNEL_TAG after a kernel release)"; fail=1
+            fi
+          done
+          # the task text matches the chart's shipped copy
+          python3 - "$GITHUB_WORKSPACE" <<'PY' || fail=1
+          import sys, re
+          ws = sys.argv[1]
+          values = open(f"{ws}/kernel/chart/values.yaml").read()
+          m = re.search(r"  pr-review\.txt: \|\n((?:(?!^  [a-zA-Z_][a-zA-Z0-9_.-]*: |^[a-zA-Z]).+\n)*)", values, re.M)
+          assert m, "chart task text not found"
+          chart_text = "\n".join(l[4:] if l.startswith("    ") else l for l in m.group(1).split("\n")).strip()
+          repo_text = open(f"{ws}/tasks/pr-review.txt").read().strip()
+          sys.exit(0 if chart_text == repo_text else 1)
+          PY
+          [ "$fail" = 0 ] && echo "drift guards: all vendored content matches the kernel ✓" || exit 1

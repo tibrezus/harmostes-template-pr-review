@@ -1,0 +1,89 @@
+# The pr-review WorkflowTemplate — this repo is the template's home
+# (three-tier phase 3b, ADR-0011 amendment). The DECISION FIELDS (model,
+# models windows, thinking, timeout, toolBudget, maxFixes) are NOT here and
+# never were in the base: the deployment decides them (the Configuration
+# Contract) — per-environment config-tier overlays patch them onto the
+# delivered CR once this repo delivers it. spec.source (#787) makes the
+# MR-bridge propose against THIS file and signed pushes land as revision
+# identity.
+apiVersion: harmostes.dev/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pr-review
+spec:
+  source:
+    forge: github
+    repo: tibrezus/harmostes-template-pr-review
+    path: template.yaml
+    branch: main
+    secretRef:
+      name: harmostes-template-webhook
+      key: secret
+  agent:
+    gate:
+      plugin:
+        name: pr-review
+    # ── Configuration contract (ADR-0011 Amendment) ─────────────────
+    # The decision fields — model, models (time windows), thinking,
+    # timeout, toolBudget, maxFixes — are NOT set here. The deployment
+    # (k8s-config HelmRelease values) decides every one of them; the
+    # render fails with per-field documentation until it does (enforced
+    # in workflow-templates.yaml). Decision history: the wiki's
+    # Configuration Contract page. Contract fields (skill, taskTemplate,
+    # tools, gate/deploy plugins) are kernel logic and stay.
+    # ────────────────────────────────────────────────────────────────
+    skill: /skills/pr-review/SKILL.md
+    taskTemplate:
+      configMap: harmostes-tasks
+      key: pr-review.txt
+      name: pr-review
+    tools:
+      - read
+      - bash
+      - grep
+  deploy:
+    plugin:
+      # #749 Phase 3: post-review.sh is DELETED. The reviewer posts with
+      # the review-post extension (findings at proof time, verdict
+      # comment, carry/coverage/research tools); the gate sweep consumes
+      # worker-side (label off + pr-review/verdict status at the standing
+      # verdict — convergeConsume). The deploy node is structural
+      # (fixed-shape prepare→agent→deploy), so it runs noop.
+      name: noop
+  description: PR review (fetch PR → agent → pr-review → consumed by the sweep)
+  prepare:
+    plugin:
+      name: workspace
+      # #689: the clone/rig prelude is unbounded by default — one
+      # rhesadox run sat the FULL 120m wall in prepare (its healthy
+      # sibling took 2m26s) and was killed with zero durable work: no
+      # session, no timeline, no verdict. Bound it: a stalled prepare
+      # fails the node at 5m ("timed out after 5m0s"), the claim
+      # releases, and the gate re-dispatches — minutes lost, not the
+      # wall.
+      timeout: 5m
+  reviewReady:
+    # #695 r1: the template must declare the wall its own budget assumes —
+    # runBound absent falls back to OneShotRunBound (30m), against which a
+    # 200-call cap can never bind and the nudge (100) never fires. The
+    # fleet instances override identically (120m/135m); declaring it here
+    # makes the chart render self-consistent. dispatchTimeout >= runBound
+    # + MinDispatchMargin.
+    runBound: 120m
+    dispatchTimeout: 135m
+    horizon: 6h
+    label: needs-review
+  scope:
+    - default: needs-review
+      description: only act when this label is present on a PR
+      kind: string
+      label: Label trigger
+      name: label
+    - description: the scope the prepare plugin operates on (owner/repo)
+      kind: list
+      label: Repos
+      name: repos
+    - description: context repo some agents use for design evidence
+      kind: string
+      label: Wiki repo
+      name: wiki
