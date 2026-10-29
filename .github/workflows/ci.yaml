@@ -60,7 +60,7 @@ jobs:
           import sys, re
           ws = sys.argv[1]
           values = open(f"{ws}/kernel/chart/values.yaml").read()
-          m = re.search(r"  pr-review\.txt: \|\n((?:(?!^  [a-zA-Z_][a-zA-Z0-9_.-]*: |^[a-zA-Z]).+\n)*)", values, re.M)
+          m = re.search(r"  pr-review\.txt: \|\n((?:(?!^  [a-zA-Z_][a-zA-Z0-9_.-]*: |^[a-zA-Z])[^\n]*\n)*)", values, re.M)
           assert m, "chart task text not found"
           chart_text = "\n".join(l[4:] if l.startswith("    ") else l for l in m.group(1).split("\n")).strip()
           repo_text = open(f"{ws}/tasks/pr-review.txt").read().strip()
