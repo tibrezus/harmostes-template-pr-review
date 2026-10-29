@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 env:
-  KERNEL_TAG: "v1.9.2"
+  KERNEL_TAG: "v1.9.4"
 
 jobs:
   conformance:
