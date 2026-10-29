@@ -11,15 +11,19 @@ tasks/pr-review.txt  the agent's environment briefing (verbatim from the chart)
 plugins/           vendored copies of the image built-ins this template runs
 ```
 
-## The decision-field split (the Configuration Contract)
+## The decision fields (three-tier end state)
 
-The DECISION FIELDS — model, models windows, thinking, timeout, toolBudget,
-maxFixes — are **not in this repo and never were in the chart base**: the
-deployment decides them. Once this repo DELIVERS the CR (the per-env Flux
-wiring), the config tier (`tibrezus/harmostes-config` overlays) patches the
-decision fields onto it per environment — kustomize strategic merge, the
-same values that rode the HelmRelease before. Model WINDOWS additionally
-ride the AgentProfile (the decision surface, phase 1a).
+- **model / models windows**: NOT here — the environment's **AgentProfile**
+  decides (profile windows → template fallback, phase 1a). Dev and prod run
+  different engines; the repo cannot pin one.
+- **thinking / timeout / toolBudget / maxFixes**: the template's own BASE,
+  carried here (this repo is owner-private versioned content — the chart-era
+  "deployment decides via values" contract governed a PUBLIC chart default
+  and retires with the chart's template rendering at phase 4). Per-env
+  divergence rides the field-wise INSTANCE merge (instance wins, the
+  day-one rule) until AgentProfile grows per-template overlays.
+- **sessions.pvc**: the base names the lineage claim; deployments override
+  per instance if theirs differs.
 
 ## Drift guards
 

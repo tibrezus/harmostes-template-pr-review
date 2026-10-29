@@ -1,8 +1,15 @@
-# What THIS repo delivers to a cluster: the template CR, nothing else.
-# (The config tier patches the decision fields per environment; the tasks
-# text becomes a ConfigMap at flip time — delivered by THIS repo then, via
-# a configMapGenerator added in the same change as the flip.)
+# What THIS repo delivers to a cluster: the template CR + its task text
+# (the agent's environment briefing) as a ConfigMap under the name the CR's
+# taskTemplate references. Decision fields: model stays EMPTY (the env's
+# AgentProfile decides); per-env divergence rides the field-wise instance
+# merge until AgentProfile grows per-template overlays.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - template.yaml
+generatorOptions:
+  disableNameSuffixHash: true   # taskTemplate.configMap references a STATIC name
+configMapGenerator:
+  - name: pr-review-tasks
+    files:
+      - pr-review.txt=tasks/pr-review.txt

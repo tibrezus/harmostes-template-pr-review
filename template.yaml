@@ -23,24 +23,35 @@ spec:
     gate:
       plugin:
         name: pr-review
-    # ── Configuration contract (ADR-0011 Amendment) ─────────────────
-    # The decision fields — model, models (time windows), thinking,
-    # timeout, toolBudget, maxFixes — are NOT set here. The deployment
-    # (k8s-config HelmRelease values) decides every one of them; the
-    # render fails with per-field documentation until it does (enforced
-    # in workflow-templates.yaml). Decision history: the wiki's
-    # Configuration Contract page. Contract fields (skill, taskTemplate,
-    # tools, gate/deploy plugins) are kernel logic and stay.
-    # ────────────────────────────────────────────────────────────────
+    # ── Decision fields, three-tier end state ────────────────────────
+    # model: EMPTY BY DESIGN — the environment's AgentProfile decides the
+    # model (profile windows → template fallback, phase 1a); dev and prod
+    # run different engines and this repo cannot pin one. models windows
+    # likewise ride the profile, not the template.
+    # thinking/timeout/toolBudget/maxFixes below are the template's own
+    # BASE (the owner's versioned tuning — this repo is private-owner
+    # content, not a public chart default; the 10-25 "deployment decides"
+    # contract governed the chart era and dies with it at phase 4).
+    # Per-env divergence rides the field-wise INSTANCE merge (instance
+    # wins — the day-one Templates-and-Instances rule) until AgentProfile
+    # grows per-template overlays (ADR-0011 amendment's end surface).
     skill: /skills/pr-review/SKILL.md
     taskTemplate:
-      configMap: harmostes-tasks
+      # THIS repo delivers the task text (tasks/pr-review.txt → ConfigMap
+      # pr-review-tasks from the root kustomization) — the chart's
+      # harmostes-tasks stops carrying it once a deployment flips here.
+      configMap: pr-review-tasks
       key: pr-review.txt
       name: pr-review
     tools:
       - read
       - bash
       - grep
+    model: ""
+    thinking: high
+    timeout: 3600
+    toolBudget: 0
+    maxFixes: 3
   deploy:
     plugin:
       # #749 Phase 3: post-review.sh is DELETED. The reviewer posts with
@@ -87,3 +98,7 @@ spec:
       kind: string
       label: Wiki repo
       name: wiki
+  # Lineage store (the #509/#510 resume chain): the base names the claim;
+  # a deployment with a different PVC overrides per instance (field-wise).
+  sessions:
+    pvc: harmostes-worker-sessions
