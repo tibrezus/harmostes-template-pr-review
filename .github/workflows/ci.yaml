@@ -9,6 +9,7 @@ on:
 
 env:
   KERNEL_TAG: "v1.9.4"
+  CONFORMANCE_TAG: "v1.10.0" # the kernel release carrying tools/conformance (the CRD-owned harness)
 
 jobs:
   conformance:
@@ -19,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tibrezus/harmostes
-          ref: ${{ env.KERNEL_TAG }}
+          ref: ${{ env.CONFORMANCE_TAG }}
           path: kernel
       - uses: actions/setup-go@v5
         with:
