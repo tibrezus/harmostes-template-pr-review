@@ -30,11 +30,12 @@ jobs:
           sudo mkdir -p /usr/local/kubebuilder/bin && sudo chown -R "$USER" /usr/local/kubebuilder
           curl -sL --retry 5 --retry-all-errors "https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.31.0/envtest-v1.31.0-linux-amd64.tar.gz" | tar -xz -C /tmp
           mv /tmp/controller-tools/envtest/* /usr/local/kubebuilder/bin/
-      - name: CR conformance (the shared harness)
+      - name: CR conformance (the kernel-owned harness)
+        # tools/conformance ships IN the kernel (the CRD owner owns its
+        # prober); the checkout above carries it at CONFORMANCE_TAG. Run
+        # inside the kernel tree — it is its own Go module.
         run: |
-          git clone --depth 1 https://github.com/tibrezus/harmostes-config /tmp/config
-          cd /tmp/config && go mod download 2>/dev/null || true
-          go run ./hack/conformance.go -crds "$GITHUB_WORKSPACE/kernel/chart/crds" -objects "$GITHUB_WORKSPACE"
+          ( cd kernel && go run ./tools/conformance -crds "$GITHUB_WORKSPACE/kernel/chart/crds" -objects "$GITHUB_WORKSPACE" )
 
   drift:
     runs-on: ubuntu-latest
@@ -77,19 +78,39 @@ jobs:
           repository: tibrezus/harmostes
           ref: ${{ env.KERNEL_TAG }}
           path: kernel
-          submodules: recursive
+          # no submodules: the .agents gitlink points at the PRIVATE agents
+          # repo; the parity step below reads the pinned REV from the tree
+          # (rev-parse needs no clone) and fetches content via the REST tarball
       - uses: actions/setup-go@v6
         with:
           go-version-file: kernel/go.mod
+      - name: materialize the pinned agents content (REST tarball)
+        # agents went PRIVATE (2026-10-29) and git clones from runner IPs are
+        # abuse-throttled for this PAT — the content arrives via the REST
+        # tarball (api.github.com is a separate bucket), the pattern the
+        # fork-maintenance skill-drift job proved. The tree is extracted twice:
+        # $ws/agents (the parity step's base) and kernel/.agents (the empty
+        # gitlink dir — the contract suite resolves that path via pluginSource).
+        env:
+          GH_TOKEN: ${{ secrets.HARMOSTES_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REV="$(git -C kernel rev-parse HEAD:.agents)"
+          gh api "repos/tibrezus/agents/tarball/$REV" > /tmp/agents.tar.gz
+          mkdir -p "$GITHUB_WORKSPACE/agents"
+          tar -xzf /tmp/agents.tar.gz -C "$GITHUB_WORKSPACE/agents" --strip-components=1
+          # git materializes the .agents gitlink as an EMPTY directory — a
+          # symlink would nest inside it (kernel/.agents/agents) and silently
+          # resolve nothing. Fill the directory itself; missing dir fails loud.
+          tar -xzf /tmp/agents.tar.gz -C "$GITHUB_WORKSPACE/kernel/.agents" --strip-components=1
       - name: task-text ↔ kernel contract suite
         run: |
           HARMOSTES_KERNEL_DIR="$GITHUB_WORKSPACE/kernel" go test ./contract/ -v
       - name: pillar/skill parity (the served skill at the pinned agents rev)
+        # the materialize step above already extracted the pinned REV into
+        # $GITHUB_WORKSPACE/agents — this step only runs the checks
         run: |
           set -euo pipefail
-          REV="$(git -C kernel rev-parse HEAD:.agents)"
-          git clone -q --no-checkout https://github.com/tibrezus/agents "$GITHUB_WORKSPACE/agents"
-          git -C "$GITHUB_WORKSPACE/agents" checkout -q "$REV"
           python3 - "$GITHUB_WORKSPACE" <<'PY'
           import os, re, sys
           ws = sys.argv[1]
